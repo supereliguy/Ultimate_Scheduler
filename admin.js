@@ -14,10 +14,6 @@ let shifts = [];
 window.loadUsers = loadUsers;
 window.loadSites = loadSites;
 
-function showSection(id) {
-    // Overridden by index.html global showSection, removing this
-}
-
 // Users
 async function loadUsers() {
     const data = await apiClient.get('/api/users');
@@ -351,7 +347,7 @@ window.goToSchedule = (btn) => {
     }
 };
 
-window.enterSite = (siteId) => {
+window.enterSite = async (siteId) => {
     const site = adminSites.find(s => s.id === siteId);
     if(!site) return;
 

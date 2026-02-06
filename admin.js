@@ -330,6 +330,27 @@ window.saveSiteUsers = async () => {
     }
 };
 
+// --- Navigation & Schedule Controls ---
+let currentScheduleView = 'timeline'; // 'timeline' or 'calendar'
+
+window.goToSchedule = (btn) => {
+    // Default to first site if available, or stay if already in a site context
+    // Ideally we track 'last active site'
+    const siteId = document.getElementById('site-dashboard-section').dataset.siteId
+                   || (adminSites.length > 0 ? adminSites[0].id : null);
+
+    if (siteId) {
+        enterSite(parseInt(siteId));
+        if (btn) {
+            document.querySelectorAll('.list-group-item').forEach(el => el.classList.remove('active'));
+            btn.classList.add('active');
+        }
+    } else {
+        alert('No sites available. Please create a site first.');
+        showSection('sites-section');
+    }
+};
+
 window.enterSite = (siteId) => {
     const site = adminSites.find(s => s.id === siteId);
     if(!site) return;
@@ -337,20 +358,56 @@ window.enterSite = (siteId) => {
     document.getElementById('sd-site-name').textContent = site.name;
     document.getElementById('site-dashboard-section').dataset.siteId = siteId;
 
-    // Set default date inputs if empty
-    const startInput = document.getElementById('schedule-start-date');
-    if(!startInput.value) {
-        startInput.valueAsDate = new Date();
-        // Set to first of current month
-        const d = new Date();
-        d.setDate(1);
-        startInput.value = d.toISOString().split('T')[0];
+    // Set default month if empty
+    const monthPicker = document.getElementById('schedule-month-picker');
+    if(!monthPicker.value) {
+        const today = new Date();
+        monthPicker.value = `${today.getFullYear()}-${(today.getMonth()+1).toString().padStart(2, '0')}`;
     }
 
+    // Trigger date calc
+    onMonthPickerChange();
+
     showSection('site-dashboard-section');
-    // Load initial data for the site?
-    // We can lazily load when tabs are clicked, or just load schedule now.
-    // loadSiteSchedule(); // Function to be implemented later
+    loadSchedule();
+};
+
+window.changeMonth = (delta) => {
+    const picker = document.getElementById('schedule-month-picker');
+    if(!picker.value) return;
+
+    const [y, m] = picker.value.split('-').map(Number);
+    const date = new Date(y, m - 1 + delta, 1);
+
+    picker.value = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2, '0')}`;
+    onMonthPickerChange();
+};
+
+window.onMonthPickerChange = () => {
+    const picker = document.getElementById('schedule-month-picker');
+    if(!picker.value) return;
+
+    const [y, m] = picker.value.split('-').map(Number);
+    const firstDay = new Date(y, m - 1, 1);
+    const lastDay = new Date(y, m, 0); // last day of previous month (so month m)
+
+    // Update hidden inputs
+    document.getElementById('schedule-start-date').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('schedule-days').value = lastDay.getDate();
+
+    loadSchedule();
+};
+
+window.switchScheduleView = (mode) => {
+    currentScheduleView = mode;
+    document.getElementById('view-timeline-btn').classList.toggle('active', mode === 'timeline');
+    document.getElementById('view-calendar-btn').classList.toggle('active', mode === 'calendar');
+    document.getElementById('view-timeline-btn').classList.toggle('btn-primary', mode === 'timeline');
+    document.getElementById('view-timeline-btn').classList.toggle('btn-outline-primary', mode !== 'timeline');
+    document.getElementById('view-calendar-btn').classList.toggle('btn-primary', mode === 'calendar');
+    document.getElementById('view-calendar-btn').classList.toggle('btn-outline-primary', mode !== 'calendar');
+
+    loadSchedule();
 };
 
 function updateSiteSelects() {
@@ -436,8 +493,6 @@ const getScheduleParams = () => ({
     days: document.getElementById('schedule-days').value
 });
 
-document.getElementById('load-schedule-btn').addEventListener('click', loadSchedule);
-
 document.getElementById('generate-schedule-btn').addEventListener('click', async () => {
     const params = getScheduleParams();
     if(!params.siteId) return alert('Select site');
@@ -489,35 +544,46 @@ async function loadSchedule() {
     const shifts = shiftsData.shifts || [];
     const siteUsers = usersData.users || [];
 
+    const display = document.getElementById('schedule-display');
+    display.innerHTML = ''; // clear
+
+    if (currentScheduleView === 'calendar') {
+        renderScheduleCalendarView(display, params, assignments, requests, shifts, siteUsers);
+    } else {
+        renderScheduleTimelineView(display, params, assignments, requests, shifts, siteUsers);
+    }
+
+    // Update Other Tabs
+    renderSiteUsersList(siteUsers);
+    renderStats(siteUsers, assignments, shifts);
+}
+
+function renderScheduleTimelineView(container, params, assignments, requests, shifts, users) {
     // Calculate Date Range
     const [y, m, d] = params.startDate.split('-').map(Number);
     const startObj = new Date(y, m-1, d);
     const daysCount = parseInt(params.days);
 
-    const display = document.getElementById('schedule-display');
-
-    // Build Grid
-    let html = '<div style="overflow-x:auto;"><table border="1" style="min-width: 100%; text-align: center;">';
+    let html = '<div style="overflow-x:auto;"><table class="table table-bordered mb-0" style="min-width: 100%; text-align: center; border-collapse: separate; border-spacing: 0;">';
 
     // Header Row
-    html += '<thead><tr><th style="position: sticky; left: 0; background: #eee; z-index: 1;">User</th>';
+    html += '<thead><tr><th style="min-width: 150px; left: 0; z-index: 20;">User</th>';
     for(let i=0; i<daysCount; i++) {
         const date = new Date(startObj);
         date.setDate(startObj.getDate() + i);
         const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
         const dayNum = date.getDate();
         const monthNum = date.getMonth() + 1;
-        html += `<th style="min-width: 80px;">${monthNum}/${dayNum}<br><small>${dayName}</small></th>`;
+        html += `<th style="min-width: 90px;">${monthNum}/${dayNum}<br><small class="text-secondary">${dayName}</small></th>`;
     }
     html += '</tr></thead><tbody>';
 
     // User Rows
-    siteUsers.forEach(u => {
-        html += `<tr><td style="position: sticky; left: 0; background: #fff; font-weight: bold;">${u.username}</td>`;
+    users.forEach(u => {
+        html += `<tr><td style="position: sticky; left: 0; background: #161b22; z-index: 10; font-weight: bold; border-right: 2px solid #30363d;">${u.username}</td>`;
         for(let i=0; i<daysCount; i++) {
             const date = new Date(startObj);
             date.setDate(startObj.getDate() + i);
-            // Format YYYY-MM-DD
             const dateStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
 
             // Find existing assignment or request
@@ -537,22 +603,17 @@ async function loadSchedule() {
             }
 
             // Cell Style
-            let cellStyle = '';
-            let bgStyle = '';
-            if (isLocked) {
-                cellStyle = 'border: 2px solid #2196F3;';
-                bgStyle = 'background-color: #e3f2fd;';
-            } else if (isOff) {
-                cellStyle = 'border: 2px solid #f44336;';
-                bgStyle = 'background-color: #ffebee;';
-            } else if (assign) {
-                bgStyle = 'background-color: #e3f2fd;';
-            }
+            let cellClass = '';
+            let style = '';
 
-            html += `<td style="${bgStyle} padding: 2px;">`;
-            html += `<select onchange="updateAssignment(${params.siteId}, '${dateStr}', ${u.id}, this.value)" style="width: 100%; ${cellStyle}">`;
+            if (isLocked) style = 'border: 2px solid #1f6feb; background-color: rgba(31, 111, 235, 0.1);';
+            else if (isOff) style = 'border: 2px solid #da3633; background-color: rgba(218, 54, 51, 0.1);';
+            else if (assign) style = 'background-color: rgba(31, 111, 235, 0.1);';
+
+            html += `<td style="padding: 4px; ${style}">`;
+            html += `<select onchange="updateAssignment(${params.siteId}, '${dateStr}', ${u.id}, this.value)">`;
             html += `<option value="">-</option>`;
-            html += `<option value="OFF" ${currentShiftId === 'OFF' ? 'selected' : ''}>REQUEST OFF</option>`;
+            html += `<option value="OFF" ${currentShiftId === 'OFF' ? 'selected' : ''}>OFF</option>`;
             shifts.forEach(s => {
                 const selected = currentShiftId === s.id ? 'selected' : '';
                 html += `<option value="${s.id}" ${selected}>${s.name}</option>`;
@@ -564,11 +625,73 @@ async function loadSchedule() {
     });
 
     html += '</tbody></table></div>';
-    display.innerHTML = html;
+    container.innerHTML = html;
+}
 
-    // Update Other Tabs
-    renderSiteUsersList(siteUsers);
-    renderStats(siteUsers, assignments, shifts);
+function renderScheduleCalendarView(container, params, assignments, requests, shifts, users) {
+    const [y, m, d] = params.startDate.split('-').map(Number);
+    const startObj = new Date(y, m-1, d); // Should be 1st of month typically
+    const daysCount = parseInt(params.days); // Should be whole month
+
+    // Create 7 column grid
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    let html = '<div class="calendar-grid" style="grid-template-columns: repeat(7, 1fr);">';
+
+    // Header
+    weekdays.forEach(day => {
+        html += `<div class="calendar-header">${day}</div>`;
+    });
+
+    // Padding for first day
+    const firstDayOfWeek = startObj.getDay();
+    for(let i=0; i<firstDayOfWeek; i++) {
+        html += `<div class="calendar-day empty"></div>`;
+    }
+
+    // Days
+    for(let i=0; i<daysCount; i++) {
+        const date = new Date(startObj);
+        date.setDate(startObj.getDate() + i);
+        const dateStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
+
+        // Find all assignments for this day
+        const dayAssigns = assignments.filter(a => a.date === dateStr);
+
+        // Group by Shift
+        const shiftsOnDay = {};
+        shifts.forEach(s => shiftsOnDay[s.id] = []);
+
+        dayAssigns.forEach(a => {
+            if(shiftsOnDay[a.shift_id]) {
+                const u = users.find(user => user.id === a.user_id);
+                if(u) shiftsOnDay[a.shift_id].push(u.username);
+            }
+        });
+
+        html += `<div class="calendar-day">
+            <div class="calendar-day-header">${date.getDate()}</div>`;
+
+        // Render Shifts
+        shifts.forEach(s => {
+            const assignedUsers = shiftsOnDay[s.id] || [];
+            if(assignedUsers.length > 0) {
+                const isNight = s.name.toLowerCase().includes('night');
+                const badgeClass = isNight ? 'shift-badge night' : 'shift-badge';
+                html += `<div class="${badgeClass}" title="${s.name}: ${assignedUsers.join(', ')}">
+                    <strong>${s.name}:</strong> ${assignedUsers.join(', ')}
+                </div>`;
+            }
+        });
+
+        html += `</div>`;
+    }
+
+    // Padding end (optional, CSS handles grid auto placement but good for borders)
+    // skipping for simplicity as grid handles it nicely
+    html += '</div>';
+
+    container.innerHTML = html;
 }
 
 function renderSiteUsersList(users) {

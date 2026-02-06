@@ -10,7 +10,7 @@
     <style>
         .loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: white; z-index: 9999; display: flex; justify-content: center; align-items: center;
+            background: #0d1117; color: #f0f6fc; z-index: 9999; display: flex; justify-content: center; align-items: center;
             flex-direction: column;
         }
         /* Admin layout overrides */
@@ -40,6 +40,7 @@
             <!-- Sidebar -->
             <div class="col-md-2 mb-4">
                 <div class="list-group shadow-sm">
+                    <button class="list-group-item list-group-item-action py-3 fw-bold" onclick="goToSchedule(this)">Schedule</button>
                     <button class="list-group-item list-group-item-action py-3 fw-bold active" onclick="showSection('users-section', this)">Users</button>
                     <button class="list-group-item list-group-item-action py-3 fw-bold" onclick="showSection('sites-section', this)">Sites & Shifts</button>
                     <button class="list-group-item list-group-item-action py-3 fw-bold" onclick="loadGlobalSettings(this)">Global Settings</button>
@@ -93,6 +94,7 @@
                     </table>
 
                     <div id="shifts-container" style="display:none; margin-top: 30px; border-top: 1px solid #ccc; padding-top: 20px;">
+                        <input type="hidden" id="shift-site-select">
                         <h4>Shifts for <span id="current-shift-site-name"></span></h4>
                         <button class="btn btn-sm btn-secondary mb-3" onclick="closeShiftsEditor()">Close Shift Editor</button>
 
@@ -131,25 +133,34 @@
                     <div class="tab-content">
                         <!-- Schedule Editor -->
                         <div class="tab-pane fade show active" id="sd-schedule">
-                            <div class="row mb-3 g-2 align-items-end">
-                                <div class="col-md-3">
-                                    <label>Start Date</label>
-                                    <input type="date" id="schedule-start-date" class="form-control">
+                            <!-- New Controls -->
+                            <div class="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style="background-color: #161b22; border: 1px solid #30363d;">
+                                <div class="d-flex align-items-center gap-2">
+                                    <button class="btn btn-secondary" onclick="changeMonth(-1)">Previous</button>
+                                    <input type="month" id="schedule-month-picker" class="form-control" style="width: auto;" onchange="onMonthPickerChange()">
+                                    <button class="btn btn-secondary" onclick="changeMonth(1)">Next</button>
                                 </div>
-                                <div class="col-md-2">
-                                    <label>Days</label>
-                                    <input type="number" id="schedule-days" class="form-control" value="30">
-                                </div>
-                                <div class="col-md-7">
-                                    <button class="btn btn-info text-white" id="load-schedule-btn">Load</button>
-                                    <button class="btn btn-warning btn-lg text-dark fw-bold shadow-sm" id="generate-schedule-btn">Auto-Schedule</button>
-                                    <span id="generation-status" class="ms-2 d-none fw-bold text-info">
-                                        <span class="spinner-border spinner-border-sm" role="status"></span> Generating...
-                                    </span>
-                                    <button class="btn btn-secondary" onclick="openSnapshotsModal()">Undo/History</button>
+
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-primary active" id="view-timeline-btn" onclick="switchScheduleView('timeline')">Timeline</button>
+                                        <button type="button" class="btn btn-outline-primary" id="view-calendar-btn" onclick="switchScheduleView('calendar')">Calendar</button>
+                                    </div>
+                                    <div class="vr mx-2 text-secondary"></div>
+                                    <button class="btn btn-warning fw-bold text-dark" id="generate-schedule-btn">Auto-Schedule</button>
+                                    <button class="btn btn-secondary" onclick="openSnapshotsModal()">History</button>
                                 </div>
                             </div>
-                            <div id="schedule-display" style="overflow-x: auto; min-height: 400px; border: 1px solid #ddd;"></div>
+
+                            <!-- Hidden inputs for backward compatibility with existing logic -->
+                            <input type="hidden" id="schedule-start-date">
+                            <input type="hidden" id="schedule-days">
+
+                            <span id="generation-status" class="d-none fw-bold text-info ms-2">
+                                <span class="spinner-border spinner-border-sm" role="status"></span> Generating...
+                            </span>
+
+                            <div id="schedule-display" style="min-height: 500px;"></div>
                         </div>
 
                         <!-- Site Users -->

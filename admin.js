@@ -633,14 +633,13 @@ function renderScheduleTimelineView(container, params, assignments, requests, sh
             }
 
             // Cell Style
-            let cellClass = '';
-            let style = '';
+            let cellClass = 'schedule-cell';
 
-            if (isLocked) style = 'border: 2px solid #1f6feb; background-color: rgba(31, 111, 235, 0.1);';
-            else if (isOff) style = 'border: 2px solid #da3633; background-color: rgba(218, 54, 51, 0.1);';
-            else if (assign) style = 'background-color: rgba(31, 111, 235, 0.1);';
+            if (isLocked) cellClass += ' schedule-cell-locked';
+            else if (isOff) cellClass += ' schedule-cell-off';
+            else if (assign) cellClass += ' schedule-cell-assigned';
 
-            html += `<td style="padding: 4px; ${style}">`;
+            html += `<td class="${cellClass}">`;
             html += `<select onchange="updateAssignment(${params.siteId}, '${dateStr}', ${u.id}, this.value)">`;
             html += `<option value="">-</option>`;
             html += `<option value="OFF" ${currentShiftId === 'OFF' ? 'selected' : ''}>OFF</option>`;

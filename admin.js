@@ -513,10 +513,16 @@ window.loadShifts = async (siteId) => {
 function renderShifts() {
     const tbody = document.querySelector('#shifts-table tbody');
     tbody.innerHTML = '';
+    const dNames = ['Su','Mo','Tu','We','Th','Fr','Sa'];
     shifts.forEach(s => {
+        const days = (s.days_of_week || '0,1,2,3,4,5,6').split(',').map(Number);
+        let dayStr = 'All Days';
+        if (days.length < 7) {
+            dayStr = days.map(d => dNames[d]).join(', ');
+        }
         tbody.innerHTML += `
             <tr>
-                <td>${s.name}</td>
+                <td>${s.name} <br><small class="text-secondary">${dayStr}</small></td>
                 <td>${s.start_time} - ${s.end_time}</td>
                 <td>${s.required_staff}</td>
                 <td><button class="btn btn-sm btn-danger" onclick="deleteShift(${s.id})">Delete</button></td>
@@ -532,8 +538,10 @@ document.getElementById('create-shift-btn').addEventListener('click', async () =
     const end_time = document.getElementById('new-shift-end').value;
     const required_staff = document.getElementById('new-shift-staff').value;
 
+    const days_of_week = Array.from(document.querySelectorAll('.shift-day-check:checked')).map(c => c.value).join(',');
+
     if (siteId && name) {
-        await apiClient.post(`/api/sites/${siteId}/shifts`, { name, start_time, end_time, required_staff });
+        await apiClient.post(`/api/sites/${siteId}/shifts`, { name, start_time, end_time, required_staff, days_of_week });
         loadShifts(siteId);
     } else {
         alert('Select site and enter shift name');
@@ -730,6 +738,8 @@ function renderScheduleTimelineView(container, params, assignments, requests, sh
             html += `<option value="">-</option>`;
             html += `<option value="OFF" ${currentShiftId === 'OFF' ? 'selected' : ''}>OFF</option>`;
             shifts.forEach(s => {
+                const validDays = (s.days_of_week || '0,1,2,3,4,5,6').split(',').map(Number);
+                if (!validDays.includes(date.getDay())) return;
                 const selected = currentShiftId === s.id ? 'selected' : '';
                 html += `<option value="${s.id}" ${selected}>${s.name}</option>`;
             });
@@ -771,18 +781,22 @@ function renderScheduleDatesShiftsView(container, params, assignments, requests,
             const shiftAssigns = assignments.filter(a => a.date === dateStr && a.shift_id === s.id);
 
             html += '<td style="min-width: 200px;">';
+
+            const validDays = (s.days_of_week || '0,1,2,3,4,5,6').split(',').map(Number);
+            if (!validDays.includes(date.getDay())) {
+                html += '<small class="text-secondary">N/A</small></td>';
+                return;
+            }
+
             // Render existing assignments as dropdowns
             // Plus empty slots if needed to reach required_staff
-            const slots = Math.max(s.required_staff, shiftAssigns.length + 1); // allow adding more
+            const slots = Math.max(s.required_staff, shiftAssigns.length);
 
             // Collect used users for this day (to grey out?) - Logic simplified for now
 
             for(let k=0; k<slots; k++) {
                 const assign = shiftAssigns[k]; // undefined if empty slot
                 const currentUserId = assign ? assign.user_id : '';
-
-                // Only show empty slot if we haven't reached required staff, or if it's the next available one
-                if (!assign && k >= s.required_staff && k > shiftAssigns.length) continue;
 
                 html += `<select class="form-select form-select-sm mb-1" onchange="updateShiftSlot(${params.siteId}, '${dateStr}', ${s.id}, this.value, '${currentUserId}')">`;
                 html += `<option value="">-</option>`;
@@ -830,13 +844,18 @@ function renderScheduleShiftsDatesView(container, params, assignments, requests,
             const shiftAssigns = assignments.filter(a => a.date === dateStr && a.shift_id === s.id);
 
             html += '<td>';
-            const slots = Math.max(s.required_staff, shiftAssigns.length + 1);
+
+            const validDays = (s.days_of_week || '0,1,2,3,4,5,6').split(',').map(Number);
+            if (!validDays.includes(date.getDay())) {
+                html += '<small class="text-secondary">N/A</small></td>';
+                continue;
+            }
+
+            const slots = Math.max(s.required_staff, shiftAssigns.length);
 
             for(let k=0; k<slots; k++) {
                 const assign = shiftAssigns[k];
                 const currentUserId = assign ? assign.user_id : '';
-
-                if (!assign && k >= s.required_staff && k > shiftAssigns.length) continue;
 
                 html += `<select class="form-select form-select-sm mb-1" onchange="updateShiftSlot(${params.siteId}, '${dateStr}', ${s.id}, this.value, '${currentUserId}')">`;
                 html += `<option value="">-</option>`;

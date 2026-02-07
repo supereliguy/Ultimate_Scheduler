@@ -65,6 +65,7 @@ class DBWrapper {
                 start_time TEXT,
                 end_time TEXT,
                 required_staff INTEGER DEFAULT 1,
+                days_of_week TEXT DEFAULT '0,1,2,3,4,5,6',
                 FOREIGN KEY(site_id) REFERENCES sites(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS assignments (
@@ -144,6 +145,20 @@ class DBWrapper {
             }
         } catch(e) {
             console.error("Migration error (availability_rules):", e);
+        }
+
+        // Migration: Add days_of_week to shifts if missing
+        try {
+            const result = this.db.exec("PRAGMA table_info(shifts)");
+            if (result.length > 0) {
+                const cols = result[0].values;
+                const hasDays = cols.some(c => c[1] === 'days_of_week');
+                if (!hasDays) {
+                    this.db.run("ALTER TABLE shifts ADD COLUMN days_of_week TEXT DEFAULT '0,1,2,3,4,5,6'");
+                }
+            }
+        } catch(e) {
+            console.error("Migration error (days_of_week):", e);
         }
 
         // Seed Global Settings

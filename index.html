@@ -146,6 +146,8 @@
                                     <div class="btn-group" role="group">
                                         <button type="button" class="btn btn-primary active" id="view-timeline-btn" onclick="switchScheduleView('timeline')">Timeline</button>
                                         <button type="button" class="btn btn-outline-primary" id="view-calendar-btn" onclick="switchScheduleView('calendar')">Calendar</button>
+                                        <button type="button" class="btn btn-outline-primary" id="view-dates-shifts-btn" onclick="switchScheduleView('dates-shifts')">By Date</button>
+                                        <button type="button" class="btn btn-outline-primary" id="view-shifts-dates-btn" onclick="switchScheduleView('shifts-dates')">By Shift</button>
                                     </div>
                                     <div class="vr mx-2 text-secondary"></div>
                                     <button class="btn btn-warning fw-bold text-dark" id="generate-schedule-btn">Auto-Schedule</button>
@@ -257,6 +259,18 @@
                         <div class="col-md-6">
                             <h6>Shift Ranking (Drag to reorder - TBD)</h6>
                             <textarea id="setting-shift-ranking" class="form-control" rows="5" placeholder="Enter shift names in order of preference, one per line"></textarea>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6>Availability Rules (Uncheck to Block)</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <strong>Days of Week</strong>
+                            <div id="setting-avail-days" class="border p-2 rounded bg-light"></div>
+                        </div>
+                        <div class="col-md-8">
+                            <strong>Shifts (By Site)</strong>
+                            <div id="setting-avail-shifts" class="border p-2 rounded bg-light" style="max-height: 200px; overflow-y: auto;"></div>
                         </div>
                     </div>
                     <hr>

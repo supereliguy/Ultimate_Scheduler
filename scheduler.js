@@ -83,6 +83,9 @@ const generateSchedule = async ({ siteId, startDate, days, force }) => {
         let shiftRanking = [];
         try { shiftRanking = JSON.parse(s.shift_ranking || '[]'); } catch(e) {}
 
+        let availability = { blocked_days: [], blocked_shifts: [] };
+        try { availability = JSON.parse(s.availability_rules || '{"blocked_days":[], "blocked_shifts":[]}'); } catch(e) {}
+
         userSettings[u.id] = {
             max_consecutive: s.max_consecutive_shifts !== undefined ? s.max_consecutive_shifts : g.max_consecutive,
             min_days_off: s.min_days_off !== undefined ? s.min_days_off : g.min_days_off,
@@ -90,7 +93,8 @@ const generateSchedule = async ({ siteId, startDate, days, force }) => {
             target_shifts: s.target_shifts !== undefined ? s.target_shifts : g.target_shifts,
             target_variance: s.target_shifts_variance !== undefined ? s.target_shifts_variance : g.target_variance,
             preferred_block_size: s.preferred_block_size !== undefined ? s.preferred_block_size : g.preferred_block_size,
-            shift_ranking: shiftRanking
+            shift_ranking: shiftRanking,
+            availability
         };
     });
 
@@ -167,6 +171,15 @@ const generateSchedule = async ({ siteId, startDate, days, force }) => {
 const checkConstraints = (u, shift, dateStr, dateObj, state, settings, req) => {
     // 0. Request Off (Hardest Constraint usually)
     if (req && req.type === 'off') return { valid: false, reason: 'Requested Off' };
+
+    // 0.1 Availability Rules (Hard Constraint)
+    const dayOfWeek = dateObj.getDay(); // 0-6
+    if (settings.availability && settings.availability.blocked_days && settings.availability.blocked_days.includes(dayOfWeek)) {
+         return { valid: false, reason: 'Availability (Day Blocked)' };
+    }
+    if (settings.availability && settings.availability.blocked_shifts && settings.availability.blocked_shifts.includes(shift.id)) {
+         return { valid: false, reason: 'Availability (Shift Blocked)' };
+    }
 
     // 1. Max Consecutive
     if (state.consecutive + 1 > settings.max_consecutive) return { valid: false, reason: `Max Consecutive Shifts (${settings.max_consecutive})` };

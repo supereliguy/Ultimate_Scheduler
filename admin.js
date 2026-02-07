@@ -42,24 +42,89 @@ function renderUsers() {
 }
 
 window.openSettings = async (id) => {
-    const data = await apiClient.get(`/api/users/${id}/settings`);
-    if(data.settings) {
+    try {
+        const data = await apiClient.get(`/api/users/${id}/settings`);
+        if(!data.settings) throw new Error('Could not load settings');
         const s = data.settings;
+
         document.getElementById('settings-user-id').value = id;
         document.getElementById('setting-max-consecutive').value = s.max_consecutive_shifts;
         document.getElementById('setting-min-days-off').value = s.min_days_off;
-        document.getElementById('setting-target-shifts').value = s.target_shifts || 20;
+        document.getElementById('setting-target-shifts').value = s.target_shifts || 8;
 
         // Shift Ranking
         let ranking = [];
         try { ranking = JSON.parse(s.shift_ranking || '[]'); } catch(e) {}
         document.getElementById('setting-shift-ranking').value = ranking.join('\n');
 
+        // Availability Rules
+        let avail = { blocked_days: [], blocked_shifts: [] };
+        try { avail = JSON.parse(s.availability_rules || '{"blocked_days":[], "blocked_shifts":[]}'); } catch(e) {}
+
+        // Render Days (0=Sun)
+        const daysDiv = document.getElementById('setting-avail-days');
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        daysDiv.innerHTML = '';
+        dayNames.forEach((d, i) => {
+            const isChecked = !avail.blocked_days.includes(i);
+            daysDiv.innerHTML += `
+                <div class="form-check">
+                    <input class="form-check-input avail-day-check" type="checkbox" value="${i}" id="ad-${i}" ${isChecked ? 'checked' : ''}>
+                    <label class="form-check-label" for="ad-${i}">${d}</label>
+                </div>
+            `;
+        });
+
+        // Render Shifts (Fetch all sites first if needed)
+        // We rely on adminSites being loaded. If empty, try load.
+        if(adminSites.length === 0) await loadSites();
+
+        const shiftsDiv = document.getElementById('setting-avail-shifts');
+        shiftsDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Loading shifts...';
+
+        // Fetch shifts for all sites
+        const allShifts = [];
+        for (const site of adminSites) {
+            const sData = await apiClient.get(`/api/sites/${site.id}/shifts`);
+            if (sData.shifts) {
+                sData.shifts.forEach(sh => {
+                    sh.siteName = site.name;
+                    allShifts.push(sh);
+                });
+            }
+        }
+
+        shiftsDiv.innerHTML = '';
+        if (allShifts.length === 0) {
+            shiftsDiv.innerHTML = '<small class="text-muted">No shifts defined.</small>';
+        } else {
+            // Group by Site
+            const bySite = {};
+            allShifts.forEach(sh => {
+                if (!bySite[sh.siteName]) bySite[sh.siteName] = [];
+                bySite[sh.siteName].push(sh);
+            });
+
+            for (const [siteName, sList] of Object.entries(bySite)) {
+                shiftsDiv.innerHTML += `<h6 class="mt-2 mb-1 small text-primary fw-bold">${siteName}</h6>`;
+                sList.forEach(sh => {
+                    const isChecked = !avail.blocked_shifts.includes(sh.id);
+                    shiftsDiv.innerHTML += `
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input avail-shift-check" type="checkbox" value="${sh.id}" id="as-${sh.id}" ${isChecked ? 'checked' : ''}>
+                            <label class="form-check-label small" for="as-${sh.id}">${sh.name}</label>
+                        </div>
+                    `;
+                });
+            }
+        }
+
         // Bootstrap Modal
         const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
         modal.show();
-    } else {
-        alert('Could not load settings');
+    } catch(e) {
+        console.error(e);
+        alert('Error loading settings: ' + e.message);
     }
 };
 
@@ -70,6 +135,15 @@ window.saveSettings = async () => {
     const rankingText = document.getElementById('setting-shift-ranking').value;
     const ranking = rankingText.split('\n').map(s => s.trim()).filter(s => s);
 
+    // Parse Availability
+    const blocked_days = [];
+    document.querySelectorAll('.avail-day-check:not(:checked)').forEach(el => blocked_days.push(parseInt(el.value)));
+
+    const blocked_shifts = [];
+    document.querySelectorAll('.avail-shift-check:not(:checked)').forEach(el => blocked_shifts.push(parseInt(el.value)));
+
+    const availability_rules = { blocked_days, blocked_shifts };
+
     const body = {
         max_consecutive_shifts: document.getElementById('setting-max-consecutive').value,
         min_days_off: document.getElementById('setting-min-days-off').value,
@@ -77,7 +151,8 @@ window.saveSettings = async () => {
         night_preference: 1.0,
         target_shifts_variance: 2,
         preferred_block_size: 3,
-        shift_ranking: JSON.stringify(ranking)
+        shift_ranking: JSON.stringify(ranking),
+        availability_rules: JSON.stringify(availability_rules)
     };
 
     try {
@@ -380,12 +455,19 @@ window.onMonthPickerChange = () => {
 
 window.switchScheduleView = (mode) => {
     currentScheduleView = mode;
-    document.getElementById('view-timeline-btn').classList.toggle('active', mode === 'timeline');
-    document.getElementById('view-calendar-btn').classList.toggle('active', mode === 'calendar');
-    document.getElementById('view-timeline-btn').classList.toggle('btn-primary', mode === 'timeline');
-    document.getElementById('view-timeline-btn').classList.toggle('btn-outline-primary', mode !== 'timeline');
-    document.getElementById('view-calendar-btn').classList.toggle('btn-primary', mode === 'calendar');
-    document.getElementById('view-calendar-btn').classList.toggle('btn-outline-primary', mode !== 'calendar');
+
+    const updateBtn = (id, active) => {
+        const btn = document.getElementById(id);
+        if(!btn) return;
+        btn.classList.toggle('active', active);
+        btn.classList.toggle('btn-primary', active);
+        btn.classList.toggle('btn-outline-primary', !active);
+    };
+
+    updateBtn('view-timeline-btn', mode === 'timeline');
+    updateBtn('view-calendar-btn', mode === 'calendar');
+    updateBtn('view-dates-shifts-btn', mode === 'dates-shifts');
+    updateBtn('view-shifts-dates-btn', mode === 'shifts-dates');
 
     loadSchedule();
 };
@@ -579,6 +661,10 @@ async function loadSchedule() {
 
     if (currentScheduleView === 'calendar') {
         renderScheduleCalendarView(display, params, assignments, requests, shifts, siteUsers);
+    } else if (currentScheduleView === 'dates-shifts') {
+        renderScheduleDatesShiftsView(display, params, assignments, requests, shifts, siteUsers);
+    } else if (currentScheduleView === 'shifts-dates') {
+        renderScheduleShiftsDatesView(display, params, assignments, requests, shifts, siteUsers);
     } else {
         renderScheduleTimelineView(display, params, assignments, requests, shifts, siteUsers);
     }
@@ -656,6 +742,142 @@ function renderScheduleTimelineView(container, params, assignments, requests, sh
     html += '</tbody></table></div>';
     container.innerHTML = html;
 }
+
+function renderScheduleDatesShiftsView(container, params, assignments, requests, shifts, users) {
+    const [y, m, d] = params.startDate.split('-').map(Number);
+    const startObj = new Date(y, m-1, d);
+    const daysCount = parseInt(params.days);
+
+    let html = '<div style="overflow-x:auto;"><table class="table table-bordered mb-0" style="min-width: 100%; text-align: center;">';
+
+    // Header: Date, Shift 1, Shift 2...
+    html += '<thead><tr><th style="min-width: 120px;">Date</th>';
+    shifts.forEach(s => {
+        html += `<th>${s.name} <small class="text-secondary d-block">Req: ${s.required_staff}</small></th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    // Rows: Dates
+    for(let i=0; i<daysCount; i++) {
+        const date = new Date(startObj);
+        date.setDate(startObj.getDate() + i);
+        const dateStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+
+        html += `<tr><td class="fw-bold">${date.getMonth()+1}/${date.getDate()} <small>${dayName}</small></td>`;
+
+        shifts.forEach(s => {
+            // Find assignments for this shift on this date
+            const shiftAssigns = assignments.filter(a => a.date === dateStr && a.shift_id === s.id);
+
+            html += '<td style="min-width: 200px;">';
+            // Render existing assignments as dropdowns
+            // Plus empty slots if needed to reach required_staff
+            const slots = Math.max(s.required_staff, shiftAssigns.length + 1); // allow adding more
+
+            // Collect used users for this day (to grey out?) - Logic simplified for now
+
+            for(let k=0; k<slots; k++) {
+                const assign = shiftAssigns[k]; // undefined if empty slot
+                const currentUserId = assign ? assign.user_id : '';
+
+                // Only show empty slot if we haven't reached required staff, or if it's the next available one
+                if (!assign && k >= s.required_staff && k > shiftAssigns.length) continue;
+
+                html += `<select class="form-select form-select-sm mb-1" onchange="updateShiftSlot(${params.siteId}, '${dateStr}', ${s.id}, this.value, '${currentUserId}')">`;
+                html += `<option value="">-</option>`;
+                users.forEach(u => {
+                    const selected = u.id === currentUserId ? 'selected' : '';
+                    html += `<option value="${u.id}" ${selected}>${u.username}</option>`;
+                });
+                html += `</select>`;
+            }
+            html += '</td>';
+        });
+        html += '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+function renderScheduleShiftsDatesView(container, params, assignments, requests, shifts, users) {
+    const [y, m, d] = params.startDate.split('-').map(Number);
+    const startObj = new Date(y, m-1, d);
+    const daysCount = parseInt(params.days);
+
+    let html = '<div style="overflow-x:auto;"><table class="table table-bordered mb-0" style="min-width: 100%; text-align: center;">';
+
+    // Header: Shift, Date 1, Date 2...
+    html += '<thead><tr><th style="min-width: 150px; left: 0; z-index: 20; position: sticky; background: #fff;">Shift</th>';
+    for(let i=0; i<daysCount; i++) {
+        const date = new Date(startObj);
+        date.setDate(startObj.getDate() + i);
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+        html += `<th style="min-width: 150px;">${date.getMonth()+1}/${date.getDate()}<br><small class="text-secondary">${dayName}</small></th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    // Rows: Shifts
+    shifts.forEach(s => {
+        html += `<tr><td style="position: sticky; left: 0; background: #161b22; z-index: 10; font-weight: bold; border-right: 2px solid #30363d;">${s.name} <br><small class="text-secondary">Req: ${s.required_staff}</small></td>`;
+
+        for(let i=0; i<daysCount; i++) {
+            const date = new Date(startObj);
+            date.setDate(startObj.getDate() + i);
+            const dateStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
+
+            const shiftAssigns = assignments.filter(a => a.date === dateStr && a.shift_id === s.id);
+
+            html += '<td>';
+            const slots = Math.max(s.required_staff, shiftAssigns.length + 1);
+
+            for(let k=0; k<slots; k++) {
+                const assign = shiftAssigns[k];
+                const currentUserId = assign ? assign.user_id : '';
+
+                if (!assign && k >= s.required_staff && k > shiftAssigns.length) continue;
+
+                html += `<select class="form-select form-select-sm mb-1" onchange="updateShiftSlot(${params.siteId}, '${dateStr}', ${s.id}, this.value, '${currentUserId}')">`;
+                html += `<option value="">-</option>`;
+                users.forEach(u => {
+                    const selected = u.id === currentUserId ? 'selected' : '';
+                    html += `<option value="${u.id}" ${selected}>${u.username}</option>`;
+                });
+                html += `</select>`;
+            }
+            html += '</td>';
+        }
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+window.updateShiftSlot = async (siteId, date, shiftId, newUserId, oldUserId) => {
+    // 1. If old user existed, clear them (set shiftId='')
+    // 2. If new user selected, assign them (set shiftId=shiftId)
+    // Note: API clears existing assignment for user on date automatically.
+
+    try {
+        if (oldUserId && oldUserId !== 'undefined') {
+            // Unassign old user from this shift
+            // We set their shift to empty string (which clears assignment)
+            await apiClient.put('/api/schedule/assignment', { siteId, date, userId: oldUserId, shiftId: '' });
+        }
+
+        if (newUserId) {
+            // Assign new user to this shift
+            await apiClient.put('/api/schedule/assignment', { siteId, date, userId: newUserId, shiftId });
+        }
+
+        // Reload to refresh view and slots
+        loadSchedule();
+    } catch(e) {
+        alert('Error updating slot: ' + e.message);
+    }
+};
 
 function renderScheduleCalendarView(container, params, assignments, requests, shifts, users) {
     const [y, m, d] = params.startDate.split('-').map(Number);

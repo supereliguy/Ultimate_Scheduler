@@ -124,14 +124,14 @@ api.put('/api/users/:id/settings', (req, res) => {
     if(existing) {
         window.db.prepare(`
             UPDATE user_settings SET
-            max_consecutive_shifts=?, min_days_off=?, night_preference=?, target_shifts=?, target_shifts_variance=?, preferred_block_size=?, shift_ranking=?
+            max_consecutive_shifts=?, min_days_off=?, night_preference=?, target_shifts=?, target_shifts_variance=?, preferred_block_size=?, shift_ranking=?, availability_rules=?
             WHERE user_id=?
-        `).run(s.max_consecutive_shifts, s.min_days_off, s.night_preference, s.target_shifts, s.target_shifts_variance, s.preferred_block_size, s.shift_ranking, id);
+        `).run(s.max_consecutive_shifts, s.min_days_off, s.night_preference, s.target_shifts, s.target_shifts_variance, s.preferred_block_size, s.shift_ranking, s.availability_rules, id);
     } else {
         window.db.prepare(`
-            INSERT INTO user_settings (user_id, max_consecutive_shifts, min_days_off, night_preference, target_shifts, target_shifts_variance, preferred_block_size, shift_ranking)
-            VALUES (?,?,?,?,?,?,?,?)
-        `).run(id, s.max_consecutive_shifts, s.min_days_off, s.night_preference, s.target_shifts, s.target_shifts_variance, s.preferred_block_size, s.shift_ranking);
+            INSERT INTO user_settings (user_id, max_consecutive_shifts, min_days_off, night_preference, target_shifts, target_shifts_variance, preferred_block_size, shift_ranking, availability_rules)
+            VALUES (?,?,?,?,?,?,?,?,?)
+        `).run(id, s.max_consecutive_shifts, s.min_days_off, s.night_preference, s.target_shifts, s.target_shifts_variance, s.preferred_block_size, s.shift_ranking, s.availability_rules || '{}');
     }
     res.json({ message: 'Settings saved' });
 });

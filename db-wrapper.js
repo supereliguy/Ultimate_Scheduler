@@ -46,10 +46,11 @@ class DBWrapper {
                 max_consecutive_shifts INTEGER DEFAULT 5,
                 min_days_off INTEGER DEFAULT 2,
                 night_preference REAL DEFAULT 1.0,
-                target_shifts INTEGER DEFAULT 20,
+                target_shifts INTEGER DEFAULT 8,
                 target_shifts_variance INTEGER DEFAULT 2,
                 preferred_block_size INTEGER DEFAULT 3,
                 shift_ranking TEXT DEFAULT '[]',
+                availability_rules TEXT DEFAULT '{}',
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS sites (
@@ -131,6 +132,20 @@ class DBWrapper {
             console.error("Migration error:", e);
         }
 
+        // Migration: Add availability_rules to user_settings if missing
+        try {
+            const result = this.db.exec("PRAGMA table_info(user_settings)");
+            if (result.length > 0) {
+                const cols = result[0].values;
+                const hasRules = cols.some(c => c[1] === 'availability_rules');
+                if (!hasRules) {
+                    this.db.run("ALTER TABLE user_settings ADD COLUMN availability_rules TEXT DEFAULT '{}'");
+                }
+            }
+        } catch(e) {
+            console.error("Migration error (availability_rules):", e);
+        }
+
         // Seed Global Settings
         const globalCount = this.db.exec("SELECT COUNT(*) FROM global_settings")[0].values[0][0];
         if (globalCount === 0) {
@@ -138,17 +153,13 @@ class DBWrapper {
             stmt.run('max_consecutive_shifts', '5');
             stmt.run('min_days_off', '2');
             stmt.run('night_preference', '1.0');
-            stmt.run('target_shifts', '20');
+            stmt.run('target_shifts', '8');
             stmt.run('target_shifts_variance', '2');
             stmt.run('preferred_block_size', '3');
         }
 
-        // Default Admin
-        // Check if admin exists
-        const res = this.db.exec("SELECT * FROM users WHERE username='admin'");
-        if (res.length === 0) {
-            this.db.run("INSERT INTO users (username, role) VALUES ('admin', 'admin')");
-        }
+        // Default Admin removed as requested (blank slate)
+
         this.save();
     }
 

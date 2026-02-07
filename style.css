@@ -276,3 +276,19 @@ a:hover {
 /* Utilities */
 .shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24) !important; }
 .rounded { border-radius: 6px !important; }
+
+/* Schedule Timeline Cells */
+.schedule-cell {
+    padding: 4px;
+}
+.schedule-cell-locked {
+    border: 2px solid #1f6feb !important;
+    background-color: rgba(31, 111, 235, 0.1);
+}
+.schedule-cell-off {
+    border: 2px solid #da3633 !important;
+    background-color: rgba(218, 54, 51, 0.1);
+}
+.schedule-cell-assigned {
+    background-color: rgba(31, 111, 235, 0.1);
+}

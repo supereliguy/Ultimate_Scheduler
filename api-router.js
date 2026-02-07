@@ -86,39 +86,39 @@ api.post('/api/logout', (req, res) => res.json({ message: 'Logged out' }));
 
 // Users
 api.get('/api/users', (req, res) => {
-    const users = db.prepare('SELECT * FROM users').all();
+    const users = window.db.prepare('SELECT * FROM users').all();
     res.json({ users });
 });
 api.post('/api/users', (req, res) => {
     const { username, role } = req.body;
     try {
-        const result = db.prepare('INSERT INTO users (username, role) VALUES (?, ?)').run(username, role);
+        const result = window.db.prepare('INSERT INTO users (username, role) VALUES (?, ?)').run(username, role);
         res.json({ message: 'User created', id: result.lastInsertRowid });
     } catch(e) { res.status(500).json({error: e.message}); }
 });
 api.delete('/api/users/:id', (req, res) => {
-    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+    window.db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
     res.json({ message: 'User deleted' });
 });
 
 // User Settings
 api.get('/api/users/:id/settings', (req, res) => {
-    const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.params.id);
+    const settings = window.db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.params.id);
     res.json({ settings: settings || {} });
 });
 api.put('/api/users/:id/settings', (req, res) => {
     const { id } = req.params;
     const s = req.body;
     // Upsert
-    const existing = db.prepare('SELECT 1 FROM user_settings WHERE user_id = ?').get(id);
+    const existing = window.db.prepare('SELECT 1 FROM user_settings WHERE user_id = ?').get(id);
     if(existing) {
-        db.prepare(`
+        window.db.prepare(`
             UPDATE user_settings SET
             max_consecutive_shifts=?, min_days_off=?, night_preference=?, target_shifts=?, target_shifts_variance=?, preferred_block_size=?, shift_ranking=?
             WHERE user_id=?
         `).run(s.max_consecutive_shifts, s.min_days_off, s.night_preference, s.target_shifts, s.target_shifts_variance, s.preferred_block_size, s.shift_ranking, id);
     } else {
-        db.prepare(`
+        window.db.prepare(`
             INSERT INTO user_settings (user_id, max_consecutive_shifts, min_days_off, night_preference, target_shifts, target_shifts_variance, preferred_block_size, shift_ranking)
             VALUES (?,?,?,?,?,?,?,?)
         `).run(id, s.max_consecutive_shifts, s.min_days_off, s.night_preference, s.target_shifts, s.target_shifts_variance, s.preferred_block_size, s.shift_ranking);
@@ -128,7 +128,7 @@ api.put('/api/users/:id/settings', (req, res) => {
 
 // Global Settings
 api.get('/api/settings/global', (req, res) => {
-    const rows = db.prepare('SELECT * FROM global_settings').all();
+    const rows = window.db.prepare('SELECT * FROM global_settings').all();
     const settings = {};
     rows.forEach(r => settings[r.key] = r.value);
     res.json({ settings });
@@ -136,8 +136,8 @@ api.get('/api/settings/global', (req, res) => {
 
 api.put('/api/settings/global', (req, res) => {
     const s = req.body;
-    db.transaction(() => {
-        const stmt = db.prepare('INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?)');
+    window.db.transaction(() => {
+        const stmt = window.db.prepare('INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?)');
         for(const k in s) {
             stmt.run(k, String(s[k]));
         }
@@ -147,34 +147,34 @@ api.put('/api/settings/global', (req, res) => {
 
 // Sites
 api.get('/api/sites', (req, res) => {
-    const sites = db.prepare('SELECT * FROM sites').all();
+    const sites = window.db.prepare('SELECT * FROM sites').all();
     res.json({ sites });
 });
 api.post('/api/sites', (req, res) => {
     const { name, description } = req.body;
-    const result = db.prepare('INSERT INTO sites (name, description) VALUES (?, ?)').run(name, description);
+    const result = window.db.prepare('INSERT INTO sites (name, description) VALUES (?, ?)').run(name, description);
     // Link admin to site automatically so they show up in schedule
-    db.prepare('INSERT INTO site_users (site_id, user_id) VALUES (?, 1)').run(result.lastInsertRowid);
+    window.db.prepare('INSERT INTO site_users (site_id, user_id) VALUES (?, 1)').run(result.lastInsertRowid);
     res.json({ message: 'Site created', id: result.lastInsertRowid });
 });
 api.delete('/api/sites/:id', (req, res) => {
-    db.prepare('DELETE FROM sites WHERE id = ?').run(req.params.id);
+    window.db.prepare('DELETE FROM sites WHERE id = ?').run(req.params.id);
     res.json({ message: 'Deleted' });
 });
 
 // Shifts
 api.get('/api/sites/:siteId/shifts', (req, res) => {
-    const shifts = db.prepare('SELECT * FROM shifts WHERE site_id = ?').all(req.params.siteId);
+    const shifts = window.db.prepare('SELECT * FROM shifts WHERE site_id = ?').all(req.params.siteId);
     res.json({ shifts });
 });
 api.post('/api/sites/:siteId/shifts', (req, res) => {
     const { name, start_time, end_time, required_staff } = req.body;
-    db.prepare('INSERT INTO shifts (site_id, name, start_time, end_time, required_staff) VALUES (?,?,?,?,?)')
+    window.db.prepare('INSERT INTO shifts (site_id, name, start_time, end_time, required_staff) VALUES (?,?,?,?,?)')
       .run(req.params.siteId, name, start_time, end_time, required_staff);
     res.json({ message: 'Shift created' });
 });
 api.delete('/api/shifts/:id', (req, res) => {
-    db.prepare('DELETE FROM shifts WHERE id = ?').run(req.params.id);
+    window.db.prepare('DELETE FROM shifts WHERE id = ?').run(req.params.id);
     res.json({ message: 'Deleted' });
 });
 
@@ -199,7 +199,7 @@ api.get('/api/schedule', (req, res) => {
         return res.status(400).json({ error: 'Missing date parameters' });
     }
 
-    const assignments = db.prepare(`
+    const assignments = window.db.prepare(`
         SELECT a.date, a.status, a.is_locked, a.shift_id, s.name as shift_name, u.username, u.id as user_id
         FROM assignments a
         JOIN shifts s ON a.shift_id = s.id
@@ -207,7 +207,7 @@ api.get('/api/schedule', (req, res) => {
         WHERE a.site_id = ? AND a.date BETWEEN ? AND ?
     `).all(siteId, startStr, endStr);
 
-    const requests = db.prepare(`
+    const requests = window.db.prepare(`
         SELECT r.date, r.type, r.user_id
         FROM requests r
         WHERE r.site_id = ? AND r.date BETWEEN ? AND ?
@@ -220,14 +220,14 @@ api.put('/api/schedule/assignment', (req, res) => {
     const { siteId, date, userId, shiftId } = req.body;
     const sId = String(shiftId || '').trim();
 
-    db.transaction(() => {
-        db.prepare('DELETE FROM assignments WHERE site_id = ? AND date = ? AND user_id = ?').run(siteId, date, userId);
-        db.prepare('DELETE FROM requests WHERE site_id = ? AND date = ? AND user_id = ?').run(siteId, date, userId);
+    window.db.transaction(() => {
+        window.db.prepare('DELETE FROM assignments WHERE site_id = ? AND date = ? AND user_id = ?').run(siteId, date, userId);
+        window.db.prepare('DELETE FROM requests WHERE site_id = ? AND date = ? AND user_id = ?').run(siteId, date, userId);
 
         if (sId.toUpperCase() === 'OFF') {
-            db.prepare('INSERT INTO requests (site_id, date, user_id, type) VALUES (?, ?, ?, ?)').run(siteId, date, userId, 'off');
+            window.db.prepare('INSERT INTO requests (site_id, date, user_id, type) VALUES (?, ?, ?, ?)').run(siteId, date, userId, 'off');
         } else if (sId !== '') {
-            db.prepare(`
+            window.db.prepare(`
                 INSERT INTO assignments (site_id, date, user_id, shift_id, is_locked, status)
                 VALUES (?, ?, ?, ?, 1, 'draft')
             `).run(siteId, date, userId, sId);
@@ -248,7 +248,7 @@ api.post('/api/schedule/generate', async (req, res) => {
 });
 
 api.get('/api/sites/:siteId/users', (req, res) => {
-    const users = db.prepare(`
+    const users = window.db.prepare(`
         SELECT u.id, u.username, u.role, su.category_id, c.name as category_name, c.color as category_color
         FROM users u
         JOIN site_users su ON u.id = su.user_id
@@ -260,31 +260,31 @@ api.get('/api/sites/:siteId/users', (req, res) => {
 
 // Categories
 api.get('/api/sites/:siteId/categories', (req, res) => {
-    const cats = db.prepare('SELECT * FROM user_categories WHERE site_id = ? ORDER BY priority ASC').all(req.params.siteId);
+    const cats = window.db.prepare('SELECT * FROM user_categories WHERE site_id = ? ORDER BY priority ASC').all(req.params.siteId);
     res.json({ categories: cats });
 });
 
 api.post('/api/sites/:siteId/categories', (req, res) => {
     const { name, priority, color } = req.body;
-    db.prepare('INSERT INTO user_categories (site_id, name, priority, color) VALUES (?, ?, ?, ?)').run(req.params.siteId, name, priority, color || '#ffffff');
+    window.db.prepare('INSERT INTO user_categories (site_id, name, priority, color) VALUES (?, ?, ?, ?)').run(req.params.siteId, name, priority, color || '#ffffff');
     res.json({ message: 'Category created' });
 });
 
 api.put('/api/categories/:id', (req, res) => {
     const { name, priority, color } = req.body;
-    db.prepare('UPDATE user_categories SET name=?, priority=?, color=? WHERE id=?').run(name, priority, color, req.params.id);
+    window.db.prepare('UPDATE user_categories SET name=?, priority=?, color=? WHERE id=?').run(name, priority, color, req.params.id);
     res.json({ message: 'Category updated' });
 });
 
 api.delete('/api/categories/:id', (req, res) => {
-    db.prepare('DELETE FROM user_categories WHERE id=?').run(req.params.id);
+    window.db.prepare('DELETE FROM user_categories WHERE id=?').run(req.params.id);
     res.json({ message: 'Category deleted' });
 });
 
 // Update User Category
 api.put('/api/sites/:siteId/user-category', (req, res) => {
     const { userId, categoryId } = req.body;
-    db.prepare('UPDATE site_users SET category_id = ? WHERE site_id = ? AND user_id = ?')
+    window.db.prepare('UPDATE site_users SET category_id = ? WHERE site_id = ? AND user_id = ?')
       .run(categoryId || null, req.params.siteId, userId);
     res.json({ message: 'User category updated' });
 });
@@ -294,9 +294,9 @@ api.put('/api/sites/:siteId/users', (req, res) => {
     const siteId = req.params.siteId;
 
     try {
-        db.transaction(() => {
-            db.prepare('DELETE FROM site_users WHERE site_id = ?').run(siteId);
-            const stmt = db.prepare('INSERT INTO site_users (site_id, user_id) VALUES (?, ?)');
+        window.db.transaction(() => {
+            window.db.prepare('DELETE FROM site_users WHERE site_id = ?').run(siteId);
+            const stmt = window.db.prepare('INSERT INTO site_users (site_id, user_id) VALUES (?, ?)');
             userIds.forEach(uid => stmt.run(siteId, uid));
         })();
         res.json({ message: 'Site users updated' });
@@ -310,7 +310,7 @@ api.get('/api/requests', (req, res) => {
     const { siteId, month, year } = req.query;
     const startStr = `${year}-${month.toString().padStart(2, '0')}-01`;
     const endStr = `${year}-${month.toString().padStart(2, '0')}-31`;
-    const reqs = db.prepare('SELECT * FROM requests WHERE site_id=? AND date BETWEEN ? AND ?').all(siteId, startStr, endStr);
+    const reqs = window.db.prepare('SELECT * FROM requests WHERE site_id=? AND date BETWEEN ? AND ?').all(siteId, startStr, endStr);
     res.json({ requests: reqs });
 });
 
@@ -319,11 +319,11 @@ api.post('/api/requests', (req, res) => {
     // Current user is admin (id 1)
     const userId = 1;
 
-    db.transaction(() => {
+    window.db.transaction(() => {
         requests.forEach(r => {
-            db.prepare('DELETE FROM requests WHERE site_id=? AND user_id=? AND date=?').run(siteId, userId, r.date);
+            window.db.prepare('DELETE FROM requests WHERE site_id=? AND user_id=? AND date=?').run(siteId, userId, r.date);
             if(r.type !== 'none') {
-                db.prepare('INSERT INTO requests (site_id, user_id, date, type) VALUES (?,?,?,?)').run(siteId, userId, r.date, r.type);
+                window.db.prepare('INSERT INTO requests (site_id, user_id, date, type) VALUES (?,?,?,?)').run(siteId, userId, r.date, r.type);
             }
         });
     })();
@@ -333,16 +333,16 @@ api.post('/api/requests', (req, res) => {
 
 // Snapshots
 api.get('/api/snapshots', (req, res) => {
-    const snaps = db.prepare('SELECT id, created_at, description FROM snapshots ORDER BY id DESC').all();
+    const snaps = window.db.prepare('SELECT id, created_at, description FROM snapshots ORDER BY id DESC').all();
     res.json({ snapshots: snaps });
 });
 api.post('/api/snapshots', (req, res) => {
     const data = window.db.db.export();
-    db.prepare('INSERT INTO snapshots (description, data) VALUES (?, ?)').run(req.body.description, data);
+    window.db.prepare('INSERT INTO snapshots (description, data) VALUES (?, ?)').run(req.body.description, data);
     res.json({ message: 'Snapshot created' });
 });
 api.post('/api/snapshots/:id/restore', (req, res) => {
-    const snap = db.prepare('SELECT data FROM snapshots WHERE id = ?').get(req.params.id);
+    const snap = window.db.prepare('SELECT data FROM snapshots WHERE id = ?').get(req.params.id);
     if(snap) {
         // We need to reload the DB object entirely.
         // This is tricky because db-wrapper holds the reference.

@@ -335,6 +335,10 @@ const runGreedy = ({ siteId, startObj, days, shifts, users, userSettings, reques
         // Slots to fill
         const slotsToFill = [];
         shifts.forEach(s => {
+            // Check active day
+            const activeDays = (s.days_of_week || '0,1,2,3,4,5,6').split(',').map(Number);
+            if (!activeDays.includes(dateObj.getDay())) return;
+
             const lockedForThisShift = lockedToday.filter(a => a.shiftId === s.id);
             const needed = Math.max(0, s.required_staff - lockedForThisShift.length);
             for(let k=0; k<needed; k++) slotsToFill.push(s);
